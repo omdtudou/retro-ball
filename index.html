@@ -252,7 +252,7 @@ table.boxs td:first-child{max-width:58px;overflow:hidden;text-overflow:ellipsis}
 .scout{display:flex;flex-direction:column;gap:2px}
 .chip.riv{background:#c92a2a;color:var(--ink)}
 .ftag{font:700 8px/10px var(--h);flex:none}
-.ftag.hot{color:#ff8a3d}.ftag.cold{color:#74c0fc}.ftag.blazing{color:#5cc8ff}
+.ftag.hot{color:#ff8a3d}.ftag.cold{color:#74c0fc}.ftag.blazing{color:#c77dff}
 .dsel{display:grid;grid-template-columns:1fr;gap:4px}
 .dsel .b{text-align:left;justify-content:flex-start}
 .dsel .b.on{outline:1px solid var(--hi)}
@@ -912,7 +912,7 @@ function applyGame(box, won) {
       const b = box[p.id] || { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0 };
       p.st.gp++; for (const k of ['pts', 'reb', 'ast', 'stl', 'blk', 'tpm', 'tpa', 'fgm', 'fga']) p.st[k] = (p.st[k] || 0) + (b[k] || 0);
       if (isTD(b)) { p.st.td = (p.st.td || 0) + 1; nw.push(`TRIPLE-DOUBLE for ${p.name}!`); }
-      if (b.fga !== undefined) { const ft = updForm(p, b); if (ft) { nw.push(ft === 'blazing' ? `${p.name} is BLAZING. The flames are blue.` : ft === 'hot' ? `${p.name} is on a hot streak.` : ft === 'cold' ? `${p.name} is in a shooting slump.` : `${p.name} is back to normal.`); if (ft) feedForm(p, G.teamId, ft); } }
+      if (b.fga !== undefined) { const ft = updForm(p, b); if (ft) { nw.push(ft === 'blazing' ? `${p.name} is BLAZING. The flames turned purple.` : ft === 'hot' ? `${p.name} is on a hot streak.` : ft === 'cold' ? `${p.name} is in a shooting slump.` : `${p.name} is back to normal.`); if (ft) feedForm(p, G.teamId, ft); } }
       addXP(p, (14 + b.pts * 1.2 + b.reb + b.ast + (b.stl + b.blk) * 2) * tr, nw);
       p.cond = clamp(p.cond - ri(7, 13) + (G.fac.rehab - 1) * 2, 5, 100);
       p.morale = clamp(p.morale + (won ? 4 : -4), 0, 100);
@@ -1702,8 +1702,8 @@ function feedForm(p, tid, ft) {
   const [m, a, pts, n] = lastN(p, 3), mine = tid === G.teamId, ln = lastName(p.name);
   if (a < 6 || ((ft === 'hot' || ft === 'blazing') && m / a < .52) || (ft === 'cold' && m / a > .37)) return;
   if (ft === 'blazing') {
-    post(pick([ACCTS.pace, ACCTS.buzz, ACCTS.carla]), say([`${p.name} is ${m} of his last ${a}. Past hot. The flames are blue now.`, `Blue flames. ${p.name} has hit ${Math.round(m / a * 100)}% over his last ${n} games.`, `${ln} is not on fire anymore. He is past that. ${m} of ${a}.`]), { mine: mine ? 1 : 0, star: p.star, sup: p.sup, heat: 2.2 });
-    if (mine && R() < .7) post(fanAcct(tid), say([`${ln} is BLAZING. Blue flames. ${cityTag(tid)}`, `Somebody call the fire department. ${ln} turned blue. ${cityTag(tid)}`]));
+    post(pick([ACCTS.pace, ACCTS.buzz, ACCTS.carla]), say([`${p.name} is ${m} of his last ${a}. Past hot. The flames are purple now.`, `Purple flames. ${p.name} has hit ${Math.round(m / a * 100)}% over his last ${n} games.`, `${ln} is not on fire anymore. He is past that. ${m} of ${a}.`]), { mine: mine ? 1 : 0, star: p.star, sup: p.sup, heat: 2.2 });
+    if (mine && R() < .7) post(fanAcct(tid), say([`${ln} is BLAZING. Purple flames. ${cityTag(tid)}`, `Somebody call the fire department. ${ln} turned purple. ${cityTag(tid)}`]));
   } else if (ft === 'hot') {
     post(pick([ACCTS.pace, ACCTS.buzz]), say([`${p.name} is ${m} of his last ${a} from the field. Somebody guard him.`, `${p.name} has made ${m} of his last ${a} shots. Heater.`, `Is anybody going to tell ${ln} he is allowed to miss?`]), { mine: mine ? 1 : 0, star: p.star, sup: p.sup, heat: 1.5 });
     if (mine && R() < .6) post(fanAcct(tid), say([`${ln} is HIM right now. ${cityTag(tid)}`, `Keep feeding ${ln}. Do not overthink it.`]));
@@ -1881,7 +1881,7 @@ function buildIcons() {
   ICONS.crown = makeIcon(ICON_SRC.crown, { y: '#ffd23f', r: '#ff5a3c' }, K).toDataURL();
   ICONS.goatb = badgeIcon('GOAT', '#ffb627', K);
   ICONS.superb = badgeIcon('SUPER', '#ff5a6e', K);
-  ICONS.bfire = makeIcon(ICON_SRC.fire, { y: '#4dabf7', r: '#e7f5ff' }, null).toDataURL();
+  ICONS.bfire = makeIcon(ICON_SRC.fire, { y: '#b15cff', r: '#f3d9ff' }, null).toDataURL();
   ICONS.bubble = makeIcon(ICON_SRC.bubble, ICON_PAL, null, '#fdf3e1').toDataURL();
   ICONS.heart = makeIcon(ICON_SRC.heart, ICON_PAL, null, '#ff5a6e').toDataURL();
   ICONS.rt = makeIcon(ICON_SRC.rt, ICON_PAL, null, '#5cf08a').toDataURL();
@@ -1988,7 +1988,7 @@ const legsMul = l => (l >= LEGS_WEAK ? 1 : .7 + .3 * Math.max(0, l) / LEGS_WEAK)
 function setLegs(e, v) { e.legs = clamp(v, 0, 100); if (!e.b0) return; const w = legsMul(e.legs) * (e.hurt ? .75 : 1); for (const a of ['sht', 'spd', 'def', 'reb']) e[a] = e.b0[a] * w; }
 function startLegs(p) { return p ? clamp(40 + .6 * (p.cond === undefined ? 100 : p.cond), 30, 100) : 100; }
 function initEnt(e, p, form) { e.b0 = { sht: e.sht, spd: e.spd, def: e.def, reb: e.reb }; e.form = form || 0; e.hot = 0; e.cold = 0; setLegs(e, startLegs(p)); return e; }
-/* streak tiers: 2 straight = heating up, 3 = on fire, 5 = BLAZING (blue flames; 4 for a player who came in blazing hot) */
+/* streak tiers: 2 straight = heating up, 3 = on fire, 5 = BLAZING (purple flames; 4 for a player who came in blazing hot) */
 const blazeAt = e => ((e.form || 0) >= BLAZE_F ? 4 : 5), blazing = e => (e.hot || 0) >= blazeAt(e);
 const heatBonus = e => (blazing(e) ? .085 : (e.hot || 0) >= 3 ? .055 : (e.hot || 0) === 2 ? .015 : 0) - ((e.cold || 0) >= 4 ? .035 : 0) + (e.form || 0) * .035;
 function dunkCost(e, st) { return Math.max(6, 11 + (st ? st.steps * 4 : 3) + Math.max(0, (e.wt || 210) - 215) * .08 - ((e.b0 ? e.b0.reb : e.reb) - 5) * .8); }
@@ -2153,7 +2153,7 @@ function drawPl(g, x, y, z, c1, c2, skin, hair, t, o) {
 function drawTrail(g, X) {
   const t = M.btrail; if (!t || t.length < 2) return;
   const s = M.shot && M.ball.mode === 'shot' ? M.tm[M.shot.k].ents[M.shot.i] : null, fire = s && (s.hot || 0) >= 3;
-  const col = fire && blazing(s) ? '#8fd8ff' : fire ? '#ffb347' : '#fff1dc', b = M.ball, pts = t.map(p => [X(p.x), cpy(p.y, p.z)]).concat([[X(b.x), cpy(b.y, b.z || 0)]]), n = pts.length;
+  const col = fire && blazing(s) ? '#d9a6ff' : fire ? '#ffb347' : '#fff1dc', b = M.ball, pts = t.map(p => [X(p.x), cpy(p.y, p.z)]).concat([[X(b.x), cpy(b.y, b.z || 0)]]), n = pts.length;
   g.save(); g.fillStyle = col;
   for (let i = 0; i < n - 1; i++) {
     const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], k = (i + 1) / n, sz = k > .75 ? 2 : 1;
@@ -2479,7 +2479,7 @@ function controlsHTML() {
     <li><b>Legs</b> The bar under a name. Tired legs play worse and can get hurt dunking.</li>
     <li><b>Read D</b> Every team defends differently. Pass to the man marked OPEN.</li>
     <li><b>Buzzer</b> A shot in the air at 0.0 counts. Hold SHOOT through the horn.</li>
-    <li><b>Heat</b> Three makes in a row: ON FIRE. Five: BLAZING, blue flames. Players also have hot and cold nights.</li>
+    <li><b>Heat</b> Three makes in a row: ON FIRE. Five: BLAZING, purple flames. Players also have hot and cold nights.</li>
     <li><b>Defense</b> Plays itself. Pick a scheme with YOUR D before tip-off. F to fast forward.</li></ul>`;
 }
 function pauseMatch(help) {
@@ -2914,7 +2914,7 @@ function shotArrive() {
     if (s.dunk) { impactFx(cpx(A.hoop) - cpx(M.cam), cpy(HY, 10), mine ? '#ffb627' : '#ff5a6e', 1, false); M.rimShake = .35; }
     if (M.heat === sh) { M.heat = null; popup('HEATING UP', sh.x, sh.y, 9, '#ffb347', 1); }
     if (M.fire === sh) { M.fire = null; popup('ON FIRE!', sh.x, sh.y, 11, '#ff8a3d', 1); setTimeout(() => tick(`${sh.name} is on fire. Three in a row.`), 0); }
-    if (M.blaze === sh) { M.blaze = null; popup('BLAZING!', sh.x, sh.y, 12, '#5cc8ff', 1); if (M.fx) { M.fx.shake = Math.max(M.fx.shake, .25); M.fx.mag = Math.max(M.fx.mag, 1.4); } setTimeout(() => tick(`${sh.name} is BLAZING. ${sh.hot} straight. The flames are blue.`), 0); }
+    if (M.blaze === sh) { M.blaze = null; popup('BLAZING!', sh.x, sh.y, 12, '#c77dff', 1); if (M.fx) { M.fx.shake = Math.max(M.fx.shake, .25); M.fx.mag = Math.max(M.fx.mag, 1.4); } setTimeout(() => tick(`${sh.name} is BLAZING. ${sh.hot} straight. The flames turned purple.`), 0); }
     if (M.takeover === sh) { M.takeover = null; popup('TAKEOVER!', sh.x, sh.y, 11, '#ff8a3d', 1); if (M.fx) { M.fx.shake = Math.max(M.fx.shake, .2); M.fx.mag = Math.max(M.fx.mag, 1.2); } setTimeout(() => tick(`${sh.name} is taking over this game. Three straight.`), 0); }
     tick(`${sh.name} ${s.dunk ? 'throws it down' : s.three ? 'hits the three' : s.kind === 'layup' ? 'lays it in' : 'knocks down the jumper'}.${ast}`);
     const bb = M.clock <= .01 && !M.demo ? buzzerBeater(s.k, s.i, s) : null;
@@ -3436,7 +3436,7 @@ function drawWorld(g, silOnly) {
     if (!show) continue;
     const mineKey = T.k === 0 && userHas() && !hasB && (M.phase === 'live' || M.phase === 'pass' || M.phase === 'meter');
     const label = (mineKey ? (e.i + 1) + ' ' : '') + (e.sup ? '' : e.star ? '*' : '') + e.last;
-    labels.push({ legs: T.k === 0 && !M.demo && (e.legs < 70 || e.hurt) ? e.legs : -1, s: label, x: X(e.x) + 1, y: cpy(e.y, e.z) - e.H - 10 - (e.sup ? 6 : 0), w: txtW(label, 1), c: e.hurt ? '#ff5a6e' : hasB ? '#ffb627' : blazing(e) ? '#5cc8ff' : e.hot >= 3 ? '#ff8a3d' : e.cold >= 4 ? '#74c0fc' : T.k === 0 ? '#ffffff' : '#bfe0dd', pri: hasB ? 0 : 1, fy: e.y });
+    labels.push({ legs: T.k === 0 && !M.demo && (e.legs < 70 || e.hurt) ? e.legs : -1, s: label, x: X(e.x) + 1, y: cpy(e.y, e.z) - e.H - 10 - (e.sup ? 6 : 0), w: txtW(label, 1), c: e.hurt ? '#ff5a6e' : hasB ? '#ffb627' : blazing(e) ? '#c77dff' : e.hot >= 3 ? '#ff8a3d' : e.cold >= 4 ? '#74c0fc' : T.k === 0 ? '#ffffff' : '#bfe0dd', pri: hasB ? 0 : 1, fy: e.y });
   }
   for (const T of M.tm) for (const e of T.ents) if (e.sup) drawCrown(g, X(e.x) + 1, cpy(e.y, e.z) - e.H - 6 + (Math.floor(M.t * 3 + e.i) % 2));
   if (!M.demo && userHas() && (M.phase === 'live' || M.phase === 'pass')) for (const e of M.tm[0].ents) {
@@ -3501,7 +3501,7 @@ function drawEnt(g, e, T, X) {
   drawPl(g, sx, sy, e.z, T.c1, T.c2, e.skin, e.hair, M.t, { moving: e.moving, i: e.i, ring, up: shooting || e.up || (M.phase === 'loose' && e.jump > 0), H: e.H, W: e.W, sq: e.sq || 0 });
   if (e.frozen > 0) txt(g, '?', sx + 1, sy - e.H - 9 - e.z * PZF, 1, '#ffb627', true, '#081a1f');
   if (!M.demo && (e.hot || 0) >= 3) {
-    const bz = blazing(e), top = cpy(e.y, e.z) - e.H - (bz ? 3 : 0), fl = bz ? ['#e7f5ff', '#5cc8ff', '#2f7bff'] : ['#ffb627', '#ff8a3d', '#ff5a3c'];
+    const bz = blazing(e), top = cpy(e.y, e.z) - e.H - (bz ? 3 : 0), fl = bz ? ['#f3d9ff', '#c77dff', '#8a2be2'] : ['#ffb627', '#ff8a3d', '#ff5a3c'];
     for (let n = 0; n < (bz ? 16 : 7); n++) { const ph = (M.t * (bz ? 3.8 : 3.2) + n * .37) % 1, fx = sx - (bz ? 7 : 5) + ((n * 37) % (bz ? 15 : 11)), fy = sy - 2 - ph * (e.H + (bz ? 9 : 4)); if (fy < top - 3) continue; const sz = ph > (bz ? .75 : .6) ? 1 : 2; g.fillStyle = fl[(n + Math.floor(M.t * 10)) % 3]; g.fillRect(Math.round(fx + Math.sin(M.t * 9 + n) * 1.2), Math.round(fy), sz, sz); }
   }
   if (hasB) {
