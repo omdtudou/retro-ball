@@ -329,20 +329,47 @@ useLeague('nba');
 const tFull = T => (T.name ? T.city + ' ' + T.name : T.city);
 const tShort = T => T.name || T.city;
 function slotTeam(s, id) { const L = LEAGUE_DATA[s.league || 'classic'], t = L.teams[id], o = (s.tnames && s.tnames[id]) || {}; return { city: o.city || t[0], name: o.name !== undefined ? o.name : t[1] }; }
-const INITIALS = 'ABCDEGHJKLMNOPRSTVWZ'.split('');
+const INITIALS = 'ABCDEFGHIJKLMNOPRSTVWYZ'.split('');
 const LAST = ('Abara Banks Castell Dorsey Eze Farrow Galvez Hollis Imani Jurado Keane Lindqvist Marsh Nakata Oyelaran Petrov Quince Rhodes Sato Tolliver ' +
   'Vance Whitlock Yoon Zamora Adeyemi Bright Calloway Demir Easton Falk Greer Haddad Ito Jelani Kovac Laurent Mensah Novak Ortega Pruitt Ramos Stroud ' +
   'Thorne Ulloa Varga Wilder Yates Zubiri Archer Boone Cho Draper Emery Flores Gunn Holt Ivers Jensen Kirby Lowe Mwangi Nolan Obi Pace Reed Shaw Tate Vu Wolfe ' +
-  'Okoro Brandt Suarez Tran Baptiste Olsen Akana Rivers Madaki Fenn').split(' ');
-const FIRSTS = 'Andre Bo Calvin Darius Eli Felix Gus Hector Isaiah Jalen Kofi Luca Marcus Nate Omar Pete Quinn Ray Sol Theo Victor Wes Xavier Yusuf Zeke Mae Rita Dana Jo Lena Tess Kim'.split(' ');
+  'Okoro Brandt Suarez Tran Baptiste Olsen Akana Rivers Madaki Fenn ' +
+  'Abernathy Achebe Acosta Agbaje Ahn Aldana Alvarado Amadi Amsel Anand Andrade Arce Arnaud Asante Ashby Atwater Avila Ayala Bakare Balogun Barlow Barrera Beckett ' +
+  'Bellamy Benoit Berg Bianchi Birch Blackwood Bodine Bonilla Booker Bosco Bowen Brannigan Brook Bruno Buckley Burgess Byers Cabrera Calder Camara Cardenas Carver ' +
+  'Castillo Cerny Chikwe Cisse Clement Cobb Colon Conley Corbin Coulibaly Crowder Cruz Dabney Dacosta Dalton Danso Darby Davila Deakins Delacroix Diallo Dimitrov ' +
+  'Dobbs Doucet Dowd Drummond Duarte Dunn Durazo Ebong Edwin Ekwueme Ellery Ellison Espinoza Estrada Ezeh Fairley Fajardo Farouk Fisk Fitch Fontaine Forde Fofana ' +
+  'Galloway Garrow Gatling Gentry Gibbs Gill Glover Gomez Granger Grieve Guerrero Gutierrez Hadley Hale Halvorsen Harlan Haskins Hatcher Hawley Heath Hendrix Herrera ' +
+  'Hightower Hinds Holloway Horvat Huerta Hurley Ibarra Idowu Ignatius Ingram Iwu Jalloh Jarrett Jasper Jeong Jimenez Joiner Juarez Kader Kahale Kamara Kang Kaplan ' +
+  'Keita Kendrick Kessler Kimura Kingsley Kipkemboi Knox Koroma Kowalski Kuznets Lacroix Lamb Landry Langford Larkin Lattimore Leclair Ledger Lim Lockett Loera ' +
+  'Lugo Lundgren Lyle Macias Maddox Mahoney Malek Mallory Mancini Marchand Marlow Mata Mbeki Medina Mercer Mesa Mireles Moffat Molina Monroe Moody Morrow Mosley ' +
+  'Mukasa Murillo Nash Navarro Ndiaye Neely Nguyen Nkemelu Noble Norwood Nunez Nwosu Oakes Ochoa Odom Ogunleye Okafor Okonjo Olmos Onyango Orr Osei Otero Owusu ' +
+  'Pagan Palmer Pardo Park Pastor Patel Paxton Pena Penrose Perales Pham Pickett Pinto Platt Pollard Porras Prado Price Pryor Quarles Quezada Quintero Radford ' +
+  'Rahman Ralston Ransom Reyes Rhee Ricci Rigby Rios Roach Robles Rocha Rojas Roman Rook Rosales Rowe Ruiz Ryder Saber Salas Sallah Sandoval Santos Sawyer Saxon ' +
+  'Sellers Serrano Sesay Shah Shelby Shields Silva Sinclair Singh Slade Solis Somers Soto Sowe Spears Stanton Steele Strand Sutton Sykes Tabor Talbot Tanaka Tapia ' +
+  'Teague Tejada Tennant Thibault Tiwari Toure Trejo Truong Turay Tyner Umeh Upton Usher Valdez Varela Vasquez Vega Velez Verdugo Villa Vogel Waddell Walcott Wakefield ' +
+  'Waller Ward Watts Weaver Webb Wells Whitaker Wiley Winslow Wong Woodard Wright Yamada Yaw Yeboah Yilmaz Yoder Young Zahir Zeller Zhou Ziegler Zuniga').split(' ').filter((v, i, a) => a.indexOf(v) === i);
+/* a new name avoids last names already in use, so the league does not fill up with repeats */
+let USED_LAST = new Set();
+const lastOf = n => String(n || '').split(' ').pop();
+/* rename repeats: keep the first player with a last name, give the rest a new one. Your roster is left alone unless mine is true. */
+function dedupeNames(mine) {
+  if (typeof G === 'undefined' || !G) return;
+  refreshNames(); const seen = new Set(), keepMine = !mine;
+  if (keepMine) for (const p of G.roster) seen.add(lastOf(p.name));
+  const list = allPlayers().filter(([p, t]) => !(keepMine && t === G.teamId)).map(x => x[0]).concat(G.fa || [], (G.off && G.off.prospects) || []);
+  list.sort((a, b) => (b.star ? 1 : 0) - (a.star ? 1 : 0));
+  for (const p of list) { const l = lastOf(p.name); if (seen.has(l)) { let n = genName(), k = 0; while (seen.has(lastOf(n)) && k++ < 30) n = genName(); p.name = n; } seen.add(lastOf(p.name)); }
+}
+function refreshNames() { USED_LAST = new Set(); if (typeof G !== 'undefined' && G) for (const [p] of allPlayers()) USED_LAST.add(lastOf(p.name)); if (G && G.fa) for (const p of G.fa) USED_LAST.add(lastOf(p.name)); }
+const FIRSTS = 'Andre Bo Calvin Darius Eli Felix Gus Hector Isaiah Jalen Kofi Luca Marcus Nate Omar Pete Quinn Ray Sol Theo Victor Wes Xavier Yusuf Zeke Mae Rita Dana Jo Lena Tess Kim Amara Bernard Cyrus Dmitri Elena Farah Gideon Hana Imre Jonah Keiko Lionel Marisol Nikolai Odette Priya Rafael Simone Tomas Ursula Vivian Wendell Yara Zora Ade Benji Cole Dex Ezra Fern'.split(' ');
 const COLLEGES = ['Riverbend State', 'Coastal Tech', 'Northfield College', 'Pine Hollow University', 'Granite Peak State', 'Lakeshore University', 'Mesa Verde College', 'Harbor City U', 'Old Mill State', 'Saint Brigid College'];
 const OWNERS_BASE = ['Harold Pike', 'Vivian Lusk', 'Gordon Reyes', 'Marla Quist', 'Desmond Fairweather', 'Ruth Ambler', 'Tobias Crane', 'Imogen Hale', 'Lionel Sharp', 'Patrice Dunmore', 'Walt Okafor', 'Edie Marchetti', 'Conrad Bell', 'Nadia Ferro', 'Gil Hawthorne', 'Bea Kessler'];
 
 const OWNER_NAME = id => OWNERS_BASE[id] || (FIRSTS[(id * 7) % FIRSTS.length] + ' ' + LAST[(id * 13) % LAST.length]);
 const POS = ['PG', 'SG', 'SF', 'PF', 'C'];
 const ATTR = ['sht', 'spd', 'def', 'reb'];
-const ATTR_LABEL = { sht: 'Shooting', spd: 'Speed', def: 'Defense', reb: 'Rebounding' };
-const ATTR_SHORT = { sht: 'SHT', spd: 'SPD', def: 'DEF', reb: 'REB' };
+const ATTR_LABEL = { sht: 'Shooting', spd: 'Speed', def: 'Defense', reb: 'Power' };
+const ATTR_SHORT = { sht: 'SHT', spd: 'SPD', def: 'DEF', reb: 'PWR' };
 const POSW = [[.35, .4, .2, .05], [.45, .3, .2, .05], [.3, .25, .25, .2], [.2, .15, .3, .35], [.12, .1, .33, .45]];
 const BIAS = [[.5, 1.5, 0, -2.5], [1.5, .5, 0, -2], [.4, .2, .4, -.2], [-1, -.8, .6, 1.5], [-2, -1.5, 1, 2]];
 const GAMES = 12, CAP = 90, MAXR = 10, HIRE_LEFT = 2, START_YEAR = Math.max(2026, new Date().getFullYear());
@@ -414,7 +441,12 @@ function lastN(p, n) { const a = (p.lg || []).slice(-n); return a.reduce((s, x) 
 function newStats() { return { gp: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tpm: 0, tpa: 0, fgm: 0, fga: 0, td: 0 }; }
 function ovr(p, cap) { let s = 0; for (let i = 0; i < 4; i++) s += (cap ? p.cap[ATTR[i]] : p[ATTR[i]]) * POSW[p.pos][i]; return s; }
 function marketSal(p) { const o = ovr(p); return Math.max(1, Math.round((o * o * 0.2 + (ovr(p, true) - o) * 0.6) * (p.sup ? 1.25 : 1))); }
-function genName() { return pick(INITIALS) + '. ' + pick(LAST); }
+function genName() {
+  let l = pick(LAST);
+  for (let k = 0; k < 25 && USED_LAST.has(l); k++) l = pick(LAST);
+  USED_LAST.add(l);
+  return pick(INITIALS) + '. ' + l;
+}
 function lastName(n) { return String(n).split(' ').pop(); }
 function heightFor(pos) {
   let h = [74, 77, 79, 81, 83][pos] + Math.round(gauss() * 1.4);
@@ -531,7 +563,7 @@ function genRoster(target) {
 
 /* ================= career setup ================= */
 function newCareer(slot, c) {
-  useLeague('nba');
+  useLeague('nba'); USED_LAST = new Set();
   G = {
     v: 2, league: 'nba', tnames: {}, slot, pid: 1, season: 1, year: START_YEAR, teamId: 0, game: 0, phase: 'regular', cc: 6, fans: 35,
     fac: { train: 1, rehab: 1, arena: 1 }, roster: [], teams: [], fa: [], history: [], titles: 0,
@@ -548,6 +580,7 @@ function newCareer(slot, c) {
   });
   G.awards = []; G.h2h = {}; G.scheme = 'man';
   G.teamId = -1;
+  dedupeNames(true);
   seedStars();
   G.teams.forEach(t => { t.scheme = pickScheme(t); t.sch0 = 1; });
   makeSchedule();
@@ -567,7 +600,7 @@ function newCareer(slot, c) {
   const T = TEAMS[hire], co = G.coach;
   G.story.push({ h: 'NEW HEAD COACH', face: 'coach', t: `With ${HIRE_LEFT} games left in the regular season, ${tFull(T)} has named ${co.first} ${co.last} as head coach.\n\n${co.last} spent ${co.years} seasons at ${co.college}, where the teams ran, shot and defended like they meant it. ${tShort(T)} is ${t.w}-${t.l} and needs exactly that.` });
   G.story.push({ h: 'A WORD FROM THE OWNER', face: 'owner', t: `"${co.first}, this season is not going to be saved. Use these last games to find out who can play. Next season I will expect to see real progress."\n\n${t.owner}, owner, ${tFull(T)}` });
-  initRivals(); G.h2h = {};
+  initRivals(); G.h2h = {}; dedupeNames(true);
   news(`${T.abbr} hire ${co.first} ${co.last} as head coach.`); feedHired(); feedTop5(); G.feedSeen = 0;
   saveGame();
 }
@@ -1053,6 +1086,7 @@ function hofCheck(p) {
   return false;
 }
 function beginOffseason() {
+  refreshNames();
   const st = standings(), rank = st.findIndex(t => t.id === G.teamId) + 1, me = G.teams[G.teamId], T = TEAMS[G.teamId];
   const champ = G.po ? G.po.champ : -1, res = G.po ? G.po.best : '';
   G.history.push({ year: G.year, team: G.teamId, w: me.w, l: me.l, rank, res, champ, partial: !!G.partial });
@@ -1202,6 +1236,7 @@ function draftPlayer(id) {
   G.roster.push(p); o.drafted.push(p.name); news(`${TEAMS[G.teamId].abbr} draft ${p.name} with pick ${o.at + 1}.`); feedDraft(p, o.at + 1); offNext(); return true;
 }
 function finishOffseason() {
+  refreshNames();
   G.season++; G.year++; G.game = 0; G.streak = 0; G.phase = 'regular'; G.po = null; G.off = null; G.last = null; G.dil = null; G.results = []; G.partial = false; G.offers = [];
   const undrafted = G.off ? [] : [];
   for (const t of G.teams) {
@@ -1214,7 +1249,7 @@ function finishOffseason() {
   }
   for (const k in G.riv || {}) G.riv[k] = Math.max(+k === G.arch ? 5 : TEAMS[k] && TEAMS[k].div === TEAMS[G.teamId].div ? 2 : 0, G.riv[k] - 1);
   for (const p of G.roster) { p.st = newStats(); p.morale = Math.round(p.morale * .6 + 70 * .4); }
-  fillRoster(); autoLineup(); genFA(); makeSchedule(); setExpectation(); updateStars(true); feedTop5();
+  fillRoster(); autoLineup(); genFA(); dedupeNames(false); makeSchedule(); setExpectation(); updateStars(true); feedTop5();
   const T = TEAMS[G.teamId];
   G.story.push({ h: `${G.year} SEASON PREVIEW`, t: `The experts rank ${tShort(T)} ${ordinal(G.exp.rank)} of ${TEAMS.length} heading into the season.\n\nOwner's goal: ${G.exp.text}.\nJob security: ${secLabel(G.jobSec)}.` });
   saveGame();
@@ -1298,9 +1333,17 @@ function aiSeasonEnd(champ) {
 }
 function ensureRosters() {
   let made = false;
+  refreshNames();
   for (const t of G.teams) {
     if (t.id === G.teamId) continue;
     if (!t.roster || !t.roster.length) { t.roster = bestLineup(genRoster((t.off + t.def) / 2)); teamRatings(t); made = true; }
+  }
+  if (!G.nameFix) { // older saves: give repeat last names on other teams (never yours, never stars) a fresh name
+    G.nameFix = 1; made = true;
+    const seen = new Set(G.roster.map(p => lastOf(p.name)));
+    for (const [p, tid] of allPlayers()) if (tid !== G.teamId) { const l = lastOf(p.name); if (seen.has(l) && !p.star && !p.sup) p.name = genName(); seen.add(lastOf(p.name)); }
+    for (const p of G.fa || []) { const l = lastOf(p.name); if (seen.has(l)) p.name = genName(); seen.add(lastOf(p.name)); }
+    refreshNames();
   }
   if (G.off && G.off.step === 'draft' && !G.off.queue) { setupDraft(); G.off.at = Math.max(0, (G.off.round === 2 ? TEAMS.length : 0) + (G.off.pick || 1) - 1); while (G.off.at < G.off.queue.length && G.off.queue[G.off.at] !== G.teamId) G.off.at++; if (G.off.at >= G.off.queue.length) G.off.at = G.off.queue.indexOf(G.teamId); }
   for (const t of G.teams) if (t.id !== G.teamId && (!t.scheme || t.scheme === 'man' && !t.sch0)) { t.scheme = pickScheme(t); t.sch0 = 1; made = true; }
@@ -1795,7 +1838,7 @@ function setLegs(e, v) { e.legs = clamp(v, 0, 100); if (!e.b0) return; const w =
 function startLegs(p) { return p ? clamp(40 + .6 * (p.cond === undefined ? 100 : p.cond), 30, 100) : 100; }
 function initEnt(e, p, form) { e.b0 = { sht: e.sht, spd: e.spd, def: e.def, reb: e.reb }; e.form = form || 0; e.hot = 0; e.cold = 0; setLegs(e, startLegs(p)); return e; }
 const heatBonus = e => ((e.hot || 0) >= 3 ? .055 : (e.hot || 0) === 2 ? .015 : 0) - ((e.cold || 0) >= 4 ? .035 : 0) + (e.form || 0) * .035;
-function dunkCost(e, st) { return 11 + (st ? st.steps * 4 : 3) + Math.max(0, (e.wt || 210) - 215) * .08; }
+function dunkCost(e, st) { return Math.max(6, 11 + (st ? st.steps * 4 : 3) + Math.max(0, (e.wt || 210) - 215) * .08 - ((e.b0 ? e.b0.reb : e.reb) - 5) * .8); }
 const entPid = e => (e.p ? e.p.id : e.op ? e.op.id : null);
 function strain(e, cost, bad) {
   if (M.demo || M.tut || e.hurt) return false;
@@ -2279,7 +2322,7 @@ function controlsHTML() {
     <li><b>Pass</b> Tap a teammate. Keys 1 to 5.</li>
     <li><b>Shoot</b> Hold SHOOT, let go in the green. Space.</li>
     <li><b>Juke</b> A burst that can freeze your man. Shift.</li>
-    <li><b>Rim</b> Near the rim, tap SHOOT to lay it up. Hold it to dunk, then hit each ring.</li>
+    <li><b>Rim</b> Near the rim, tap SHOOT to lay it up. Hold it to dunk, then hit each ring. High PWR players dunk more reliably.</li>
     <li><b>Legs</b> The bar under a name. Tired legs play worse and can get hurt dunking.</li>
     <li><b>Read D</b> Every team defends differently. Pass to the man marked OPEN.</li>
     <li><b>Buzzer</b> A shot in the air at 0.0 counts. Hold SHOOT through the horn.</li>
@@ -2868,9 +2911,10 @@ function startDunk(h) {
   if (M.tut) tutEvent('dunk');
   const st = DUNKS[h.dstyle], ct = contest(h), seq = [], rejP = blockChance(h, ct.who, ct.c, 'dunk');
   for (let i = 0; i < st.steps; i++) seq.push(i === 0 ? 'S' : (R() < .5 ? 'S' : 'J'));
-  const win = clamp(.21 + (h.dunkR - st.need) * .015 + zoneOf(h, 'paint') * .015 - ct.c * .36 - (G.settings.diff - 1) * .03 - (h.legs < LEGS_WEAK ? (LEGS_WEAK - h.legs) / LEGS_WEAK * .1 : 0), .06, .34);
+  const pw = (h.b0 ? h.b0.reb : h.reb) - 5;
+  const win = clamp(.21 + (h.dunkR - st.need) * .015 + zoneOf(h, 'paint') * .015 + pw * .012 - ct.c * .36 - (G.settings.diff - 1) * .03 - (h.legs < LEGS_WEAK ? (LEGS_WEAK - h.legs) / LEGS_WEAK * .1 : 0), .06, .34);
   const side = h.y < HY ? -.7 : .7;
-  M.dunk = { i: h.i, st, col: DUNK_COL[st.n] || '#ffffff', seq, step: 0, t: 0, T: 0, ph: 'up', pt: 0, win, c: ct.c, who: ct.who, sx: h.x, sy: h.y, tx: HXS[0] - 1.6, ty: HY + side, perf: 0, trail: [], gT: 0, sq: -1, horn: !M.demo && M.clock < 1.2, rejP, d0: dst(h.x, h.y, HXS[0], HY) };
+  M.dunk = { i: h.i, st, col: DUNK_COL[st.n] || '#ffffff', seq, step: 0, t: 0, T: 0, ph: 'up', pt: 0, win, c: ct.c, who: ct.who, sx: h.x, sy: h.y, tx: HXS[0] - 1.6, ty: HY + side, perf: 0, trail: [], gT: 0, sq: -1, horn: !M.demo && M.clock < 1.2, rejP: rejP * clamp(1 - pw * .07, .55, 1.3), d0: dst(h.x, h.y, HXS[0], HY), pw };
   M.phase = 'dunk'; h.moving = false; M.juke = 0; M.meter = null; sfx('juke');
   dust(cpx(h.x) - cpx(M.cam), cpy(h.y), 10);
   tick(`${h.name} rises up for the ${st.n.toLowerCase()}!`);
@@ -2934,7 +2978,7 @@ function updDunk(dt) {
   } else if (D.ph === 'wind') {
     const k = Math.min(1, D.pt / .24); h.x += (D.tx - h.x) * Math.min(1, dt * 10); h.y += (D.ty - h.y) * Math.min(1, dt * 10); h.z = 5 + (hangZ(h) - 5) * k;
     if (k >= 1 && !D.judged) {
-      D.judged = 1; const allP = D.perf === D.seq.length, r = R(), rej = (D.rejP || 0) * (allP ? .85 : 1), rim = M.tut ? 0 : clamp(.04 + D.c * D.c * 1.1 + Math.max(0, (D.d0 || 0) - 3.5) * .06, 0, .6) * (allP ? .85 : 1);
+      D.judged = 1; const allP = D.perf === D.seq.length, r = R(), rej = (D.rejP || 0) * (allP ? .85 : 1), rim = M.tut ? 0 : clamp(.04 + D.c * D.c * 1.1 + Math.max(0, (D.d0 || 0) - 3.5) * .06, 0, .6) * (allP ? .85 : 1) * clamp(1 - (D.pw || 0) * .08, .5, 1.35);
       if (r < rej) { dunkFail('rejected', true); return; }
       if (r < rej + rim) { popup('RIMMED OUT!', h.x, h.y, 12, '#ff5a6e', 1); M.rimShake = .5; dunkFail('rim', false, true); return; }
     }
@@ -3092,7 +3136,11 @@ function simToEnd() {
   const left = M.clock + Math.max(0, 4 - M.q) * M.qlen, n = Math.round(left / 30), o = myOff(), d = clamp(G.teams[M.oppId].def + [-1, 0, 1][G.settings.diff], 1, 10);
   const oo = clamp(G.teams[M.oppId].off + [-1, 0, 1][G.settings.diff], 1, 10.5), md = myDef();
   for (let i = 0; i < n; i++) {
-    if (R() < clamp(.46 + (o - d) * .03, .2, .75)) { const v = R() < .3 ? 3 : 2, e = wpick(M.tm[0].ents, q => q.sht + q.spd); scorePts(0, e.i, v); if (e.p) { const bx = M.box[e.p.id]; bx.fga++; bx.fgm++; if (v === 3) { bx.tpa++; bx.tpm++; } } }
+    { // every simulated trip is one shot: makes and misses both count
+      const e = wpick(M.tm[0].ents, q => q.sht + q.spd), three = R() < .3, bx = e.p ? M.box[e.p.id] : null;
+      if (bx) { bx.fga++; if (three) bx.tpa++; }
+      if (R() < clamp((three ? .36 : .5) + (o - d) * .03, .15, .75)) { scorePts(0, e.i, three ? 3 : 2); if (bx) { bx.fgm++; if (three) bx.tpm++; } }
+    }
     if (R() < clamp(.46 + (oo - md) * .03, .2, .75)) { const v = R() < .3 ? 3 : 2; scorePts(1, ri(0, 4), v); }
   }
   while (M.tm[0].score === M.tm[1].score) scorePts(R() < .5 ? 0 : 1, ri(0, 4), 2);
