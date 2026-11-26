@@ -349,8 +349,8 @@ const GAMES = 12, CAP = 90, MAXR = 10, HIRE_LEFT = 2, START_YEAR = Math.max(2026
 const DIFF_NAMES = ['ROOKIE', 'PRO', 'LEGEND'];
 const CUP = 'Golden Hoop';
 const DUNKS = [
-  { n: 'Power Slam', need: 9, steps: 1, hype: 1 }, { n: 'Tomahawk', need: 11, steps: 2, hype: 2 }, { n: 'Reverse Jam', need: 12, steps: 2, hype: 2 },
-  { n: 'Windmill', need: 13, steps: 3, hype: 3 }, { n: '360 Spin', need: 14, steps: 3, hype: 4 }, { n: 'Between the Legs', need: 16, steps: 4, hype: 5 }
+  { n: 'Power Slam', need: 12, steps: 1, hype: 1 }, { n: 'Tomahawk', need: 14, steps: 2, hype: 2 }, { n: 'Reverse Jam', need: 15, steps: 2, hype: 2 },
+  { n: 'Windmill', need: 16, steps: 3, hype: 3 }, { n: '360 Spin', need: 17, steps: 3, hype: 4 }, { n: 'Between the Legs', need: 19, steps: 4, hype: 5 }
 ];
 const REC_KEYS = { game: ['pts', 'reb', 'ast', 'tpm', 'stl', 'blk'], season: ['pts', 'reb', 'ast', 'tpm', 'td'], career: ['pts', 'reb', 'ast', 'tpm', 'td'] };
 const REC_LABEL = { pts: 'points', reb: 'rebounds', ast: 'assists', stl: 'steals', blk: 'blocks', tpm: 'three-pointers', td: 'triple-doubles' };
@@ -1789,7 +1789,7 @@ const PXF = 6.4, PYF = 2.9, PZF = 3.4, FLOOR = 47, VH = 216;
 let VW = 400;
 const RATE = 1.7, GC = .78, METER_T = .62, METER_MAX = 1.12, GRAV = 30;
 /* legs: dunks wear them down; tired legs weaken a player and landings can injure him */
-const LEGS_WEAK = 50, LEGS_RISK = 40, HOLD_T = .3, DUNK_R = 6.5;
+const LEGS_WEAK = 50, LEGS_RISK = 40, HOLD_T = .35, DUNK_R = 5.5;
 const legsMul = l => (l >= LEGS_WEAK ? 1 : .7 + .3 * Math.max(0, l) / LEGS_WEAK);
 function setLegs(e, v) { e.legs = clamp(v, 0, 100); if (!e.b0) return; const w = legsMul(e.legs) * (e.hurt ? .75 : 1); for (const a of ['sht', 'spd', 'def', 'reb']) e[a] = e.b0[a] * w; }
 function startLegs(p) { return p ? clamp(40 + .6 * (p.cond === undefined ? 100 : p.cond), 30, 100) : 100; }
@@ -2137,7 +2137,7 @@ function startTutorial(back) {
   M = makeMatch(G.teamId, opp.id, true, { mine: G.roster.slice(0, 5), oppTeam: fake, qlen: 720 });
   M.tut = { step: 0, back: back || 'hub', ok: false, target: null, n: 0 };
   M.diffMul = 0; M.diffSpd = .62; M.oppShot = -.3; M.diffShot = .08;
-  for (const e of M.tm[0].ents) { e.canD = true; e.dunkR = Math.max(e.dunkR || 0, 6); e.dstyle = 0; }
+  for (const e of M.tm[0].ents) { e.canD = true; e.dunkR = Math.max(e.dunkR || 0, 16); e.dstyle = 0; }
   M.tm[1].scheme = 'man';
   stageEl.innerHTML = matchHTML();
   M.cv = $('#cv'); M.g = M.cv.getContext('2d');
@@ -2421,6 +2421,7 @@ function userHandler(h, dt) {
   let sp = 13.6 + h.spd * .85 - (h.wt - 215) * .012;
   if (M.juke > 0) { M.juke -= dt; sp *= 2; ix = M.jx; iy = M.jy; }
   if (M.gather) sp *= .55;
+  if (!M.tut && M.press > .08 && dst(h.x, h.y, HXS[0], HY) < 20) sp *= .72;
   h.x += ix * sp * dt; h.y += iy * sp * dt; h.moving = Math.hypot(ix, iy) > .15;
   if (Math.abs(ix) > .15) h.fx = ix > 0 ? 1 : -1;
 }
@@ -2437,7 +2438,8 @@ function doJuke(h, x, y) {
   const m = Math.hypot(x, y) || 1; M.jx = x / m; M.jy = y / m; M.juke = .22; M.jukeCd = 2.2; sfx('juke');
   if (M.tut && h.k === 0) tutEvent('juke');
   for (const d of M.tm[1 - h.k].ents) {
-    if (dst(d.x, d.y, h.x, h.y) < 5.8 && R() < clamp(.5 + (h.spd - d.def) * .06, .2, .8)) { d.frozen = .65; popup('ANKLES!', d.x, d.y, 8, '#ffd23f', 1); }
+    const lane = dst(h.x, h.y, HXS[h.k], HY) < 16, help = lane && dst(d.x, d.y, HXS[h.k], HY) < dst(h.x, h.y, HXS[h.k], HY) - 2;
+    if (dst(d.x, d.y, h.x, h.y) < 5.8 && R() < clamp(.5 + (h.spd - d.def) * .06, .2, .8) * (help ? .25 : lane ? .6 : 1)) { d.frozen = lane ? .42 : .65; popup('ANKLES!', d.x, d.y, 8, '#ffd23f', 1); }
   }
 }
 
@@ -2520,7 +2522,7 @@ function defend(D, A, dt, bo) {
   }
   // rim protector: the defender nearest the basket steps between the driver and the rim
   let rim = -1, rx = 0, ry = 0;
-  if (!M.demo && D.scheme !== 'perim' && D.scheme !== 'zone' && dh < 21 && dh > 2) {
+  if (!M.demo && !M.tut && D.scheme !== 'perim' && D.scheme !== 'zone' && dh < 24 && dh > 2) {
     let bd = 1e9; const trapping = D.plan && bo === D.plan.i ? D.plan.helpers : [];
     D.ents.forEach((d, i) => { if (i === bo || i === helper || trapping.includes(i) || d.frozen > 0) return; const dd = dst(d.x, d.y, hx, HY); if (dd < bd) { bd = dd; rim = i; } });
     const g = Math.min(4.6, dh * .5); rx = hx + (h.x - hx) / dh * g; ry = HY + (h.y - HY) / dh * g;
@@ -2531,7 +2533,7 @@ function defend(D, A, dt, bo) {
     if (d.react > 0) { d.react -= dt; d.moving = false; d.up = false; return; }
     const onb = i === bo && !M.demo, t = i === helper ? { x: px, y: py } : i === rim ? { x: rx, y: ry } : defTarget(D, A, i, bo), kk = Math.min(1, dt * (onb ? 6 + d.def * .8 : 3 + d.def * .7));
     d.sx += (t.x - d.sx) * kk; d.sy += (t.y - d.sy) * kk;
-    moveTo(d, d.sx, d.sy, (13.2 + d.def * .65) * (onb ? (dh < 28 ? 1.1 : .97) : i === bo ? .94 : i === rim ? 1.08 : 1) * mul, dt);
+    moveTo(d, d.sx, d.sy, (13.2 + d.def * .65) * (onb ? (dh < 28 ? 1.16 : .97) : i === bo ? .94 : i === rim ? 1.15 : 1) * mul, dt);
     d.fx = h.x > d.x ? 1 : -1;
     d.up = shooting && dst(d.x, d.y, h.x, h.y) < 4.4;
   });
@@ -2551,7 +2553,7 @@ function collide(h, D, dt) {
       contact.stealCd = rnd(1.6, 2.4);
       const hx = HXS[h.k], inPaint = dst(h.x, h.y, hx, HY) < 15, front = (contact.x - h.x) * (hx - h.x) + (contact.y - h.y) * (HY - h.y) > 0;
       if (R() < clamp(.03 + (contact.def - h.spd) * .007, .01, .06) * mul) steal(contact, false);
-      else if (!M.demo && !M.tut && inPaint && front && h.moving && R() < (h.k === 0 && !M.auto[0] ? .085 : .03) * (D.k === 1 ? Math.max(.6, mul) : 1)) charge(h, contact);
+      else if (!M.demo && !M.tut && inPaint && front && h.moving && R() < (h.k === 0 && !M.auto[0] ? .1 : .03) * (D.k === 1 ? Math.max(.6, mul) : 1)) charge(h, contact);
     }
   } else M.press = Math.max(0, M.press - dt * 2);
 }
@@ -2607,7 +2609,7 @@ function contest(h) {
 function blockChance(h, d, c, kind) {
   if (!d || M.tut) return 0;
   const ha = clamp((d.ht - h.ht) * .012, -.08, .12), sk = (d.def - 5) * .012 + (d.reb - 5) * .006;
-  if (kind === 'dunk') return c > .3 ? clamp((c - .3) * .45 + ha * .5 + sk * .4, 0, .28) : 0;
+  if (kind === 'dunk') return c > .25 ? clamp((c - .25) * .6 + ha * .5 + sk * .4, 0, .32) : 0;
   if (kind === 'layup') return c > .3 ? clamp((c - .3) * .36 + ha + sk, 0, .3) : 0;
   return c > .45 ? clamp((c - .45) * .3 + ha * .7 + sk * .8, 0, .22) : 0;
 }
@@ -2866,7 +2868,7 @@ function startDunk(h) {
   if (M.tut) tutEvent('dunk');
   const st = DUNKS[h.dstyle], ct = contest(h), seq = [], rejP = blockChance(h, ct.who, ct.c, 'dunk');
   for (let i = 0; i < st.steps; i++) seq.push(i === 0 ? 'S' : (R() < .5 ? 'S' : 'J'));
-  const win = clamp(.24 + (h.dunkR - st.need) * .015 + zoneOf(h, 'paint') * .015 - ct.c * .3 - (G.settings.diff - 1) * .03 - (h.legs < LEGS_WEAK ? (LEGS_WEAK - h.legs) / LEGS_WEAK * .1 : 0), .06, .34);
+  const win = clamp(.21 + (h.dunkR - st.need) * .015 + zoneOf(h, 'paint') * .015 - ct.c * .36 - (G.settings.diff - 1) * .03 - (h.legs < LEGS_WEAK ? (LEGS_WEAK - h.legs) / LEGS_WEAK * .1 : 0), .06, .34);
   const side = h.y < HY ? -.7 : .7;
   M.dunk = { i: h.i, st, col: DUNK_COL[st.n] || '#ffffff', seq, step: 0, t: 0, T: 0, ph: 'up', pt: 0, win, c: ct.c, who: ct.who, sx: h.x, sy: h.y, tx: HXS[0] - 1.6, ty: HY + side, perf: 0, trail: [], gT: 0, sq: -1, horn: !M.demo && M.clock < 1.2, rejP, d0: dst(h.x, h.y, HXS[0], HY) };
   M.phase = 'dunk'; h.moving = false; M.juke = 0; M.meter = null; sfx('juke');
@@ -2932,7 +2934,7 @@ function updDunk(dt) {
   } else if (D.ph === 'wind') {
     const k = Math.min(1, D.pt / .24); h.x += (D.tx - h.x) * Math.min(1, dt * 10); h.y += (D.ty - h.y) * Math.min(1, dt * 10); h.z = 5 + (hangZ(h) - 5) * k;
     if (k >= 1 && !D.judged) {
-      D.judged = 1; const allP = D.perf === D.seq.length, r = R(), rej = (D.rejP || 0) * (allP ? .8 : 1), rim = M.tut ? 0 : clamp(D.c * D.c * .85 + Math.max(0, (D.d0 || 0) - 4) * .05, 0, .55) * (allP ? .8 : 1);
+      D.judged = 1; const allP = D.perf === D.seq.length, r = R(), rej = (D.rejP || 0) * (allP ? .85 : 1), rim = M.tut ? 0 : clamp(.04 + D.c * D.c * 1.1 + Math.max(0, (D.d0 || 0) - 3.5) * .06, 0, .6) * (allP ? .85 : 1);
       if (r < rej) { dunkFail('rejected', true); return; }
       if (r < rej + rim) { popup('RIMMED OUT!', h.x, h.y, 12, '#ff5a6e', 1); M.rimShake = .5; dunkFail('rim', false, true); return; }
     }
