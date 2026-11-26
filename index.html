@@ -1104,12 +1104,12 @@ function judgeSeason() {
 }
 
 /* ================= offseason ================= */
-/* every GOAT_EVERY seasons, starting with your second offseason, a maxed-out prospect enters the draft */
-const GOAT_FIRST = 2, GOAT_EVERY = 3;
+/* each offseason there is a GOAT_P chance a GOAT prospect enters the draft: 7-9 everywhere now, a perfect 10 ceiling */
+const GOAT_P = .2;
 function genGoat() {
   const p = genPlayer(ri(1, 3), 10, 19);
-  ATTR.forEach(a => { p[a] = 10; p.cap[a] = 10; });
-  p.ht = ri(79, 81); p.wt = weightFor(p.ht); p.zones = { paint: 3, mid: 3, three: 3 }; p.goat = 1; p.hype = 999; p.morale = 90; p.form = .5;
+  ATTR.forEach(a => { p[a] = ri(7, 9); p.cap[a] = 10; });
+  p.ht = ri(79, 81); p.wt = weightFor(p.ht); p.zones = { paint: ri(1, 2), mid: ri(1, 2), three: ri(1, 2) }; p.goat = 1; p.hype = 999; p.morale = 90; p.form = .5;
   return p;
 }
 function genProspects() {
@@ -1172,11 +1172,11 @@ function beginOffseason() {
     G.offers = shuffle(G.teams.filter(t => t.id !== G.teamId).map(t => t.id)).slice(0, ri(1, 2));
   }
   G.off = { step: 'summary', bonus, news: nw, rank, res, champ, exp, pick: TEAMS.length + 1 - rank, round: 1, prospects: genProspects(), drafted: [], verdict, fired, moved: false };
-  if (G.season >= GOAT_FIRST && G.season - (G.goatS === undefined ? -99 : G.goatS) >= GOAT_EVERY) {
+  if (R() < GOAT_P) {
     const g = genGoat(); G.off.prospects.unshift(g); G.goatS = G.season;
     news(`GOAT ALERT: ${g.name} (${POS[g.pos]}, ${fmtHt(g.ht)}) has declared for the draft. Scouts have never graded a prospect this high.`, true);
     feedGoatDeclares(g);
-    G.story.push({ h: 'A GENERATIONAL TALENT', t: `${g.name} has entered the draft.\n\nEvery scout in the league agrees: perfect marks in shooting, speed, defense and power. Whoever holds the first pick is getting a player who could change the league for a decade.` });
+    G.story.push({ h: 'A GENERATIONAL TALENT', t: `${g.name} has entered the draft.\n\nEvery scout in the league agrees: elite marks in shooting, speed, defense and power already, and the ceiling to max out all four. Whoever holds the first pick is getting a player who could change the league for a decade.` });
   }
   G.phase = 'offseason';
   const co = G.coach;
@@ -1784,7 +1784,7 @@ function feedJobRumor(id) {
   post(fanAcct(G.teamId), say(['Wait, our coach is job hunting??', `Coach ${G.coach.last} talking to ${TEAMS[id].city}? Read the room.`]));
 }
 function feedGoatDeclares(g) {
-  post(ACCTS.draft, `I have been grading prospects for twenty years. ${g.name} is a perfect 10 in everything. I have never typed that sentence before.`, { heat: 5 });
+  post(ACCTS.draft, `I have been grading prospects for twenty years. ${g.name} is already elite at everything, and his ceiling is a perfect 10 across the board. I have never typed that sentence before.`, { heat: 5 });
   post(ACCTS.old, `They keep saying ${lastName(g.name)} is the GOAT already. He hasn't played a minute. ...But yeah, he might be.`, { heat: 3 });
   post(ACCTS.carla, `${g.name} has officially declared for the draft. The team with the first pick just won the lottery of a lifetime.`, { heat: 4 });
 }
@@ -2175,6 +2175,63 @@ function drawSmear(g, x, y, vx, vy) {
   g.fillStyle = '#ea7a1e';
   const len = Math.min(5, Math.round(sp * .35));
   for (let q = 1; q <= len; q++) g.fillRect(Math.round(x - ux * q) - 2, Math.round(y - uy * q) - 1, 4, 3);
+}
+/* ================= ball handles (cosmetic) =================
+   The handler dribbles in one hand (dr.side: -1 screen left, 1 screen right). Moves carry the ball to the other
+   hand: crossover (low bounce in front), between the legs (low, hidden as it passes the legs), behind the back
+   (waist high, hidden behind the body) and in-and-out (a fake: toward the middle and back). Purely visual;
+   uses Math.random so it never shifts the game's own dice. */
+const DRIB = { cross: { d: .26, sw: 1 }, btl: { d: .3, sw: 1 }, btb: { d: .36, sw: 1 }, inout: { d: .28, sw: 0 } };
+const crnd = (a, b) => a + Math.random() * (b - a);
+function cpick(w) { let t = 0; for (const k in w) t += w[k]; let r = Math.random() * t; for (const k in w) { r -= w[k]; if (r <= 0) return k; } return Object.keys(w)[0]; }
+function dribOf(e) { if (!e.dr) e.dr = { side: e.fx || 1, mv: null, nx: crnd(.6, 1.6), lag: 0 }; return e.dr; }
+function dribMove(e, type) {
+  const d = dribOf(e); if (d.mv) return;
+  const m = DRIB[type]; d.mv = { type, t: 0, dur: m.d * clamp(1.12 - (e.spd || 5) * .025, .85, 1.1), from: d.side, to: m.sw ? -d.side : d.side };
+}
+/* a juke is a real move: cross toward the side you burst to, otherwise a quick in-and-out or between the legs */
+function dribJuke(e, x) {
+  const d = dribOf(e); d.mv = null;
+  const to = Math.abs(x) > .25 ? (x > 0 ? 1 : -1) : -d.side;
+  dribMove(e, to !== d.side ? cpick({ cross: 5, btl: 3, btb: 2 }) : cpick({ inout: 3, btl: 1 }));
+}
+function dribTick(e, dt) {
+  const d = dribOf(e);
+  if (d.last !== undefined && M.t - d.last > .25) { d.mv = null; d.side = e.fx || d.side; d.lag = 0; }
+  d.last = M.t;
+  if (d.mv) { d.mv.t += dt; if (d.mv.t >= d.mv.dur) { d.side = d.mv.to; d.mv = null; d.nx = Math.max(d.nx, .3); } return; }
+  if (e.moving && e.fx !== d.side) { d.lag += dt; if (d.lag > .1) { d.lag = 0; dribMove(e, cpick({ cross: 4, btl: 2.5, btb: 1.5 })); } return; }
+  d.lag = 0; d.nx -= dt;
+  if (d.nx > 0) return;
+  const near = M.tm[1 - e.k].ents.some(o => dst(o.x, o.y, e.x, e.y) < 7);
+  d.nx = near ? crnd(.7, 1.6) : crnd(1.6, 3.2);
+  if (near || !e.moving || Math.random() < .35) dribMove(e, cpick({ cross: 3, btl: 2.4, btb: (e.spd || 5) >= 5 ? 1.8 : .8, inout: 1.5 }));
+}
+/* where the ball sits relative to the handler: x offset (px), height (ft), screen nudge (px), and whether the body hides it */
+function dribPos(e, back) {
+  const d = e.dr || { side: e.fx || 1 }, hand = Math.floor((e.W || 8) / 2) + 4;
+  if (!d.mv || M.phase !== 'live') return { x: d.side * hand, z: Math.abs(Math.sin(M.t * 11)) * 2.6, yo: 0, back: false };
+  const u = clamp((d.mv.t - (back || 0)) / d.mv.dur, 0, 1), s = u * u * (3 - 2 * u), a = d.mv.from * hand, b = d.mv.to * hand, arc = Math.sin(Math.PI * u), dip = Math.abs(Math.cos(Math.PI * u));
+  switch (d.mv.type) {
+    case 'cross': return { x: a + (b - a) * s, z: 2.5 * dip, yo: Math.round(2 * arc), back: false };
+    case 'btl': return { x: a + (b - a) * s, z: 1.7 * dip, yo: 0, back: false, leg: Math.abs(u - .5) < .24 ? d.mv.from : 0 };
+    case 'btb': return { x: a + (b - a) * s, z: 2.3 + 1.1 * arc, yo: -Math.round(2 * arc), back: Math.abs(u - .5) < .26 };
+    default: return { x: a * (1 - .8 * arc), z: 2.5 * dip, yo: Math.round(arc), back: false };
+  }
+}
+function drawDrib(g, e, sx, p) {
+  const fy = cpy(e.y + .3) + p.yo;
+  if (e.dr && e.dr.mv && !p.back) {
+    const q = dribPos(e, .045); if (!q.back) { g.save(); g.globalAlpha = .35; g.fillStyle = '#ea7a1e'; g.fillRect(Math.round(sx + q.x) - 2, Math.round(cpy(e.y + .3, q.z) - 3 + q.yo) - 2, 4, 4); g.restore(); }
+  }
+  drawBall(g, sx + p.x, cpy(e.y + .3, p.z) - 3 + p.yo, fy);
+}
+/* repaint one leg over the ball so a between-the-legs dribble passes behind it (same geometry as drawPl) */
+function paintLeg(g, e, sx, side) {
+  const W = e.W || 8, H = e.H || 24, x = Math.round(sx), yy = cpy(e.y) - Math.round((e.z || 0) * PZF), extra = H - 24, leg = 6 + Math.round(extra * .45);
+  const L = x - Math.floor(W / 2), R2 = L + W, lw = Math.max(2, Math.floor((W - 2) / 2)), lx = side < 0 ? L : R2 - lw, yLeg = yy - leg;
+  g.fillStyle = '#081a1f'; g.fillRect(lx - 1, yLeg, lw + 2, leg);
+  g.fillStyle = e.skin; g.fillRect(lx, yLeg, lw, leg); g.fillStyle = '#fbf7ea'; g.fillRect(lx, yy - 2, lw, 2);
 }
 function drawBall(g, x, y, sy) {
   x = Math.round(x); y = Math.round(y);
@@ -2631,7 +2688,7 @@ function userJuke() {
 }
 function doJuke(h, x, y) {
   if (M.jukeCd > 0) return;
-  const m = Math.hypot(x, y) || 1; M.jx = x / m; M.jy = y / m; M.juke = .22; M.jukeCd = 2.2; sfx('juke');
+  const m = Math.hypot(x, y) || 1; M.jx = x / m; M.jy = y / m; M.juke = .22; M.jukeCd = 2.2; sfx('juke'); dribJuke(h, M.jx);
   if (M.tut && h.k === 0) tutEvent('juke');
   for (const d of M.tm[1 - h.k].ents) {
     const lane = dst(h.x, h.y, HXS[h.k], HY) < 16, help = lane && dst(d.x, d.y, HXS[h.k], HY) < dst(h.x, h.y, HXS[h.k], HY) - 2;
@@ -3320,6 +3377,7 @@ function update(dt) {
     case 'live': {
       const h = A.ents[M.ball.i]; M.hold += dt;
       if (k === 0 && !M.auto[0]) { userHandler(h, dt); if (M.gather) updGather(h, dt); } else aiHandler(h, dt);
+      if (M.phase === 'live' && M.ball.mode === 'held') dribTick(h, dt);
       if (M.tut && M.tut.target && dst(h.x, h.y, M.tut.target.x, M.tut.target.y) < 3) { M.tut.target = null; tutEvent('arrive'); }
       if (M.phase !== 'live') break;
       collide(h, D, dt); if (M.phase !== 'live') break;
@@ -3498,6 +3556,8 @@ function drawEnt(g, e, T, X) {
   const b = M.ball, hasB = b.mode === 'held' && b.k === T.k && b.i === e.i, sx = X(e.x), sy = cpy(e.y);
   const shooting = (M.phase === 'meter' && hasB) || (M.shot && M.shot.k === T.k && M.shot.i === e.i && e.jump > 0) || (M.phase === 'ft' && M.ft && M.ft.k === T.k && M.ft.i === e.i && M.ft.state === 'fly');
   const ring = hasB && !M.demo && M.phase !== 'ft' ? (T.k === 0 ? '#ffb627' : '#ff5a6e') : null;
+  const drib = hasB && M.phase !== 'meter' && M.phase !== 'ft' ? dribPos(e) : null;
+  if (drib && drib.back) drawDrib(g, e, sx, drib);
   drawPl(g, sx, sy, e.z, T.c1, T.c2, e.skin, e.hair, M.t, { moving: e.moving, i: e.i, ring, up: shooting || e.up || (M.phase === 'loose' && e.jump > 0), H: e.H, W: e.W, sq: e.sq || 0 });
   if (e.frozen > 0) txt(g, '?', sx + 1, sy - e.H - 9 - e.z * PZF, 1, '#ffb627', true, '#081a1f');
   if (!M.demo && (e.hot || 0) >= 3) {
@@ -3506,7 +3566,7 @@ function drawEnt(g, e, T, X) {
   }
   if (hasB) {
     if (M.phase === 'meter' || (M.phase === 'ft' && M.ft && M.ft.state !== 'fly')) drawBall(g, sx + 1, cpy(e.y, e.z) - e.H - 2);
-    else if (M.phase !== 'ft') { const bz = Math.abs(Math.sin(M.t * 11)) * 2.6; drawBall(g, sx + e.fx * 8, cpy(e.y + .3, bz) - 3, cpy(e.y + .3)); }
+    else if (drib && !drib.back) { drawDrib(g, e, sx, drib); if (drib.leg) paintLeg(g, e, sx, drib.leg); }
   }
 }
 /* ================= stage and layout ================= */
