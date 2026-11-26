@@ -259,6 +259,7 @@ table.boxs td:first-child{max-width:58px;overflow:hidden;text-overflow:ellipsis}
 .scoutg{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:0 4px}
 .scoutg .scout{gap:2px}
 .tut[hidden]{display:none}
+.goat{display:inline-block;background:#ffb627;color:#081a1f;font:700 8px/9px var(--h);padding:0 2px;letter-spacing:.5px}
 </style>
 </head>
 <body>
@@ -742,6 +743,14 @@ function rivBump(id, v, why) {
   const was = isRival(id); G.riv[id] = Math.min(12, rivHeat(id) + v);
   if (!was && isRival(id)) { news(`A rivalry is born: ${TEAMS[G.teamId].city} and ${TEAMS[id].city}. ${why}`, true); feedRivalBorn(id, why); }
 }
+/* point spread: expected margin for the first team (positive = favored). About 3.2 points per point of team strength, plus records and home court. */
+function teamStr(id) { return id === G.teamId ? (myOff() + myDef()) / 2 : (G.teams[id].off + G.teams[id].def) / 2; }
+function lineFor(a, b, homeA) {
+  const A = G.teams[a], B = G.teams[b], ga = A.w + A.l, gb = B.w + B.l, wa = ga ? A.w / ga : .5, wb = gb ? B.w / gb : .5, rw = Math.min(1, (ga + gb) / 12);
+  return Math.round(((teamStr(a) - teamStr(b)) * 3.2 + (wa - wb) * 4 * rw + (homeA === undefined ? 0 : homeA ? 1 : -1)) * 2) / 2;
+}
+const winChance = sp => 1 / (1 + Math.exp(-sp / 6.6 * 1.7));
+const lineText = sp => (Math.abs(sp) < 1 ? "PICK 'EM" : sp < 0 ? `UNDERDOG +${-sp}` : `FAVORED -${sp}`);
 function aiTeams() { return G.teams.filter(t => t.id !== G.teamId); }
 function teamRoster(id) { return id === G.teamId ? G.roster : G.teams[id].roster; }
 
@@ -831,9 +840,11 @@ function woTick(id, won) {
 }
 function woHealed(id, p) { const t = G.teams[id]; if (t && t.wo && t.wo.pid === p.id) { if (t.wo.w + t.wo.l >= 2) feedBack(id, p, t.wo); t.wo = null; } }
 function simPair(a, b) {
+  const ln = G.teamId >= 0 ? lineFor(a, b) : 0;
   const [sa, sb] = simGame(G.teams[a], G.teams[b]); recordGame(G.teams[a], sa, G.teams[b], sb);
   applyAIStats(G.teams[a], sa, b); applyAIStats(G.teams[b], sb, a);
   if (G.teamId >= 0) { woTick(a, sa > sb); woTick(b, sb > sa); }
+  if (G.teamId >= 0) { const w = sa > sb ? a : b, l = w === a ? b : a, dog = w === a ? -ln : ln; if (dog >= 7) { news(`UPSET: ${TEAMS[w].city} (+${dog}) beat ${TEAMS[l].city}.`, dog >= 9); if (R() < .6) feedUpset(w, l, dog, false, true); } }
   if (G.teamId >= 0 && Math.abs(sa - sb) <= 2 && R() < .12) {
     const w = sa > sb ? a : b, l = w === a ? b : a, ro = (G.teams[w].roster || []).slice(0, 5);
     if (ro.length) { const p = wpick(ro, q => q.sht * q.sht * (q.sup ? 3 : q.star ? 2 : 1)); news(`BUZZER BEATER: ${p.name} wins it for ${TEAMS[w].city} against ${TEAMS[l].city}.`, !!p.star); feedLeagueBB(p, w, l); }
@@ -915,7 +926,7 @@ function rewards(won, isPO, margin) {
   return { cc, fans: G.fans - before };
 }
 function finishUserGame(ms, os, box, simmed, oppTop, extra) {
-  const ng = nextGame(), won = ms > os, oppId = ng.opp, isPO = G.phase === 'playoffs', f0 = G.feedId || 0;
+  const ng = nextGame(), won = ms > os, oppId = ng.opp, isPO = G.phase === 'playoffs', f0 = G.feedId || 0, sp = lineFor(G.teamId, ng.opp, ng.home);
   const me = G.teams[G.teamId], op = G.teams[oppId], T = TEAMS[G.teamId], O = TEAMS[oppId];
   let others = [];
   if (!isPO) {
@@ -934,6 +945,16 @@ function finishUserGame(ms, os, box, simmed, oppTop, extra) {
   applyAIStats(op, os, G.teamId);
   const cb = won && extra && extra.maxDef >= 10 ? extra.maxDef : 0;
   woTick(G.teamId, won); woTick(oppId, !won);
+  let upset = 0;
+  if (won && sp <= -3) {
+    upset = -sp; const f = Math.min(6, Math.ceil(upset / 2)); G.fans = clamp(G.fans + f, 5, 100); rw.fans += f; G.roster.forEach(p => { p.morale = clamp(p.morale + 4, 0, 100); });
+    if (upset >= 6) { G.cc += 1; rw.cc += 1; }
+    news(`UPSET: ${TEAMS[G.teamId].city} (+${upset}) stun ${TEAMS[oppId].city}, ${ms}-${os}.`, true); feedUpset(G.teamId, oppId, upset, true);
+    if (upset >= 8 && !G.partial) G.story.push({ h: 'GIANT KILLERS', t: `Nobody gave ${tShort(TEAMS[G.teamId])} a chance. The line had ${TEAMS[oppId].city} by ${upset}.\n\nFinal: ${ms}-${os}. Fans +${f}%, morale up across the roster.` });
+  } else if (!won && sp >= 6) {
+    upset = -sp; G.fans = clamp(G.fans - 2, 5, 100); rw.fans -= 2;
+    news(`UPSET: ${TEAMS[oppId].city} (+${sp}) shock ${TEAMS[G.teamId].city}, ${os}-${ms}.`, true); feedUpset(oppId, G.teamId, sp, false);
+  }
   const riv = isRival(oppId), h = G.h2h[oppId] || (G.h2h[oppId] = [0, 0]); h[won ? 0 : 1]++;
   if (riv) { G.fans = clamp(G.fans + (won ? 2 : -2), 5, 100); rw.fans += won ? 2 : -2; G.roster.forEach(p => { p.morale = clamp(p.morale + (won ? 3 : -3), 0, 100); }); }
   rivBump(oppId, (Math.abs(ms - os) <= 4 ? 1 : 0) + (isPO ? 1 : 0) + (extra && extra.bb && extra.bb.some(b => b.kind === 'winner') ? 2 : 0), Math.abs(ms - os) <= 4 ? 'Another one-possession game.' : 'The playoffs will do that.');
@@ -991,7 +1012,7 @@ function finishUserGame(ms, os, box, simmed, oppTop, extra) {
   checkGameRecords(box, oppTop, oppId); checkRunningRecords();
   if (isPO) others = poRound({ won, ms, os }).filter(r => r[0] !== G.teamId && r[2] !== G.teamId);
   else if (G.game >= GAMES) startPlayoffs();
-  G.last = { ms, os, oppId, won, box, news: nw, rw, others, isPO, simmed: !!simmed, label: ng.label, home: ng.home, oppTop: oppTop || null, dunks: extra && extra.dunks ? extra.dunks : [], comeback: cb, feed0: f0, bb: bw ? { name: bw.name, mine: bw.k === 0 } : null, hurt: (extra && extra.hurt ? extra.hurt : []).filter(h => h.k === 0).map(h => h.name) };
+  G.last = { ms, os, oppId, won, box, news: nw, rw, others, isPO, simmed: !!simmed, label: ng.label, home: ng.home, oppTop: oppTop || null, dunks: extra && extra.dunks ? extra.dunks : [], comeback: cb, feed0: f0, spread: sp, upset, bb: bw ? { name: bw.name, mine: bw.k === 0 } : null, hurt: (extra && extra.hurt ? extra.hurt : []).filter(h => h.k === 0).map(h => h.name) };
   saveGame();
 }
 
@@ -1066,6 +1087,13 @@ function judgeSeason() {
 }
 
 /* ================= offseason ================= */
+/* once every five seasons a maxed-out prospect enters the draft */
+function genGoat() {
+  const p = genPlayer(ri(1, 3), 10, 19);
+  ATTR.forEach(a => { p[a] = 10; p.cap[a] = 10; });
+  p.ht = ri(79, 81); p.wt = weightFor(p.ht); p.zones = { paint: 3, mid: 3, three: 3 }; p.goat = 1; p.hype = 999; p.morale = 90; p.form = .5;
+  return p;
+}
 function genProspects() {
   const a = [];
   for (let i = 0; i < 84; i++) {
@@ -1126,6 +1154,12 @@ function beginOffseason() {
     G.offers = shuffle(G.teams.filter(t => t.id !== G.teamId).map(t => t.id)).slice(0, ri(1, 2));
   }
   G.off = { step: 'summary', bonus, news: nw, rank, res, champ, exp, pick: TEAMS.length + 1 - rank, round: 1, prospects: genProspects(), drafted: [], verdict, fired, moved: false };
+  if (G.season - (G.goatS === undefined ? -99 : G.goatS) >= 5) {
+    const g = genGoat(); G.off.prospects.unshift(g); G.goatS = G.season;
+    news(`GOAT ALERT: ${g.name} (${POS[g.pos]}, ${fmtHt(g.ht)}) has declared for the draft. Scouts have never graded a prospect this high.`, true);
+    feedGoatDeclares(g);
+    G.story.push({ h: 'A GENERATIONAL TALENT', t: `${g.name} has entered the draft.\n\nEvery scout in the league agrees: perfect marks in shooting, speed, defense and power. Whoever holds the first pick is getting a player who could change the league for a decade.` });
+  }
   G.phase = 'offseason';
   const co = G.coach;
   if (fired) feedFired();
@@ -1212,6 +1246,8 @@ function advanceDraft() {
   const o = G.off;
   while (o.at < o.queue.length && o.queue[o.at] !== G.teamId) {
     const t = G.teams[o.queue[o.at]];
+    if (o.prospects.length && o.prospects[0].goat && t.roster.length >= 10) { const w = t.roster.slice().sort((a, b) => ovr(a) - ovr(b))[0]; t.roster = t.roster.filter(q => q !== w); toFA(w); }
+    if (o.prospects.length && o.prospects[0].goat) { const g = o.prospects[0]; news(`THE GOAT: ${TEAMS[t.id].city} select ${g.name} with pick ${o.at + 1}.`, true); feedGoatPick(g, t.id, o.at + 1); }
     if (t.roster.length < 10 && o.prospects.length) { const p = o.prospects.shift(); delete p.hype; p.sal = o.at < TEAMS.length ? 2 : 1; p.yrs = 3; t.roster.push(p); if (o.at < 5) news(`${TEAMS[t.id].abbr} take ${p.name} with pick ${o.at + 1}.`); }
     o.at++;
   }
@@ -1233,6 +1269,7 @@ function draftPlayer(id) {
   const p = o.prospects[i], sal = draftCost();
   if (payroll() + sal > CAP) return false;
   o.prospects.splice(i, 1); p.sal = sal; p.yrs = 3; delete p.hype;
+  if (p.goat) { news(`THE GOAT: ${TEAMS[G.teamId].city} select ${p.name} with pick ${o.at + 1}.`, true); feedGoatPick(p, G.teamId, o.at + 1); G.story.push({ h: 'THE GOAT IS YOURS', t: `With pick ${o.at + 1}, ${tFull(TEAMS[G.teamId])} select ${p.name}.\n\nPerfect ratings across the board. Build the dynasty around him.` }); }
   G.roster.push(p); o.drafted.push(p.name); news(`${TEAMS[G.teamId].abbr} draft ${p.name} with pick ${o.at + 1}.`); feedDraft(p, o.at + 1); offNext(); return true;
 }
 function finishOffseason() {
@@ -1257,20 +1294,31 @@ function finishOffseason() {
 
 /* ================= stars and awards ================= */
 function allPlayers() { const a = []; for (const t of G.teams) for (const p of (t.id === G.teamId ? G.roster : t.roster || [])) a.push([p, t.id]); return a; }
+const SUP_N = 9;
+/* older saves had five superstars: give teams without one a new star by building up their best player */
+function topUpSuperstars() {
+  let need = SUP_N - allPlayers().filter(x => x[0].sup).length; if (need <= 0) return;
+  for (const t of shuffle(aiTeams().filter(t => !t.roster.some(p => p.sup)))) {
+    if (need <= 0) break;
+    const p = t.roster.slice().sort((a, b) => ovr(b) - ovr(a))[0]; if (!p) continue;
+    ATTR.forEach(a => { p[a] = clamp(Math.max(p[a], ri(8, 10)), 1, 10); p.cap[a] = Math.max(p.cap[a], p[a]); });
+    t.roster = bestLineup(t.roster); teamRatings(t); need--;
+  }
+}
 function updateStars(announce) {
   const all = allPlayers().sort((a, b) => ovr(b[0]) - ovr(a[0])), cut = Math.max(7.2, all[11] ? ovr(all[11][0]) : 7.2);
   all.forEach(([p, tid], i) => {
     const wasS = !!p.star, wasU = !!p.sup;
-    p.sup = i < 5 && ovr(p) >= 8;
+    p.sup = i < SUP_N && ovr(p) >= 8;
     p.star = p.sup || (i < 14 && ovr(p) >= cut);
     if (!announce) return;
-    if (p.sup && !wasU) { news(`SUPERSTAR: ${p.name} of ${TEAMS[tid].city} is now one of the five best players alive.`, true); feedSuperstar(p, tid); }
+    if (p.sup && !wasU) { news(`SUPERSTAR: ${p.name} of ${TEAMS[tid].city} has joined the league's superstar tier.`, true); feedSuperstar(p, tid); }
     else if (p.star && !wasS) news(`NEW STAR: ${p.name} of ${TEAMS[tid].city} is now one of the league's elite.`, tid === G.teamId);
     if (wasU && !p.sup) news(`${p.name} of ${TEAMS[tid].city} has slipped out of the superstar tier.`);
   });
 }
 function seedStars() {
-  const pool = shuffle(aiTeams().slice()), supT = pool.slice(0, 5), starT = pool.slice(5, 12);
+  const pool = shuffle(aiTeams().slice()), supT = pool.slice(0, SUP_N), starT = pool.slice(SUP_N, SUP_N + 7);
   const place = (t, q) => {
     const i = ri(0, 4), old = t.roster[i], p = genPlayer(old.pos, q, ri(23, 29));
     ATTR.forEach(a => { p.cap[a] = clamp(Math.max(p.cap[a], p[a] + ri(0, 1)), p[a], 10); }); p.sal = marketSal(p); p.yrs = ri(2, 3);
@@ -1338,6 +1386,7 @@ function ensureRosters() {
     if (t.id === G.teamId) continue;
     if (!t.roster || !t.roster.length) { t.roster = bestLineup(genRoster((t.off + t.def) / 2)); teamRatings(t); made = true; }
   }
+  if (!G.sup9) { G.sup9 = 1; topUpSuperstars(); updateStars(true); made = true; }
   if (!G.nameFix) { // older saves: give repeat last names on other teams (never yours, never stars) a fresh name
     G.nameFix = 1; made = true;
     const seen = new Set(G.roster.map(p => lastOf(p.name)));
@@ -1557,7 +1606,7 @@ function feedChamp(tid) {
 function feedOut(oppId) { post(fanAcct(G.teamId), say(['Season over. I need to go stare at a wall.', `Out in the playoffs. Proud of this group anyway. ${cityTag(G.teamId)}`, 'Wait until next year. Again.'])); }
 function feedFired() { post(ACCTS.carla, `Breaking: ${tFull(TEAMS[G.teamId])} have fired head coach ${coachName()}.`, { mine: 1, heat: 3 }); post(fanAcct(G.teamId), say(['About time.', 'This is a mistake and the owner knows it.', 'Wishing Coach well. Time for a change.'])); }
 function feedHired() { post(ACCTS.carla, `${tFull(TEAMS[G.teamId])} have hired ${coachName()} as head coach.`, { mine: 1, heat: 2 }); post(fanAcct(G.teamId), say([`Welcome to ${TEAMS[G.teamId].city}, Coach ${G.coach.last}! ${cityTag(G.teamId)}`, `Coach ${G.coach.last}? Never heard of them. Let's see.`, 'New coach, new us. I am cautiously optimistic.'])); }
-function feedSuperstar(p, tid) { post(ACCTS.buzz, `${p.name} has entered superstar territory. Top five player in the league and it's not up for debate.`, { sup: 1, heat: 3, mine: tid === G.teamId ? 1 : 0 }); }
+function feedSuperstar(p, tid) { post(ACCTS.buzz, `${p.name} has entered superstar territory. Top-ten player in the league and it's not up for debate.`, { sup: 1, heat: 3, mine: tid === G.teamId ? 1 : 0 }); }
 function supers() { return allPlayers().filter(x => x[0].sup).sort((a, b) => ovr(b[0]) - ovr(a[0])); }
 function feedTop5() {
   const s = supers(); if (!s.length) return;
@@ -1676,6 +1725,23 @@ function feedJobLeave(oldId, newId) {
 function feedJobRumor(id) {
   post(ACCTS.buzz, `Hearing ${coachName()} interviewed for the ${TEAMS[id].city} job. Awkward.`, { mine: 1, heat: 1.5 });
   post(fanAcct(G.teamId), say(['Wait, our coach is job hunting??', `Coach ${G.coach.last} talking to ${TEAMS[id].city}? Read the room.`]));
+}
+function feedGoatDeclares(g) {
+  post(ACCTS.draft, `I have been grading prospects for twenty years. ${g.name} is a perfect 10 in everything. I have never typed that sentence before.`, { heat: 5 });
+  post(ACCTS.old, `They keep saying ${lastName(g.name)} is the GOAT already. He hasn't played a minute. ...But yeah, he might be.`, { heat: 3 });
+  post(ACCTS.carla, `${g.name} has officially declared for the draft. The team with the first pick just won the lottery of a lifetime.`, { heat: 4 });
+}
+function feedGoatPick(g, tid, no) {
+  post(ACCTS.carla, `With pick ${no}, ${TEAMS[tid].city} select ${g.name}. The GOAT has a home.`, { mine: tid === G.teamId ? 1 : 0, heat: 6 });
+  post(fanAcct(tid), say([`WE GOT THE GOAT. ${cityTag(tid)}`, `${lastName(g.name)} is ours. Dynasty starts NOW. ${cityTag(tid)}`, 'I am framing this draft card.']), { heat: 5 });
+  if (R() < .8) post(pick([ACCTS.buzz, ACCTS.doc]), `Every other team in the league just got a little bit worse. ${lastName(g.name)} to ${TEAMS[tid].city}.`, { heat: 3 });
+}
+function feedUpset(w, l, dog, mine, league) {
+  const W = TEAMS[w], L = TEAMS[l];
+  if (league) { post(ACCTS.heads, `UPSET: ${W.city} (+${dog}) take down ${L.city}.`, { heat: 1.5 }); return; }
+  post(ACCTS.buzz, say([`${W.city} were ${dog}-point underdogs and won anyway. That's why we play the games.`, `Nobody picked ${W.city}. Nobody. +${dog} and they won.`, `${L.city} were supposed to win by ${dog}. Supposed to.`]), { mine: 1, heat: 2.5 });
+  post(fanAcct(w), say([`They counted us out. ${cityTag(w)}`, `UNDERDOGS. Write that on the banner. ${cityTag(w)}`, `Underdog season. Respect us. ${cityTag(w)}`]), { heat: 2 });
+  post(fanAcct(l), say([`Losing to ${W.city}?? I need a refund.`, `How do we lose that game. HOW.`, `${dog}-point favorites. Embarrassing.`]));
 }
 /* ================= pixel icons ================= */
 // Each icon is a grid of palette letters. An outline is added around filled pixels automatically.
@@ -3610,7 +3676,7 @@ SCREENS.pregame = () => {
   const h2h = G.h2h && G.h2h[g.opp];
   return `<div class="scr"><div class="top">${back('hub')}<h2 class="H2">${esc(g.label)}</h2><span class="chip">${g.home ? 'HOME' : 'AWAY'}</span>${isRival(g.opp) ? '<span class="chip riv">RIVALRY</span>' : ''}${h2h && h2h[0] + h2h[1] ? `<span class="chip">VS THEM ${h2h[0]}-${h2h[1]}</span>` : ''}</div>
     <div class="bx grow" style="display:flex;flex-direction:column;justify-content:center;gap:5px;padding-top:12px"><span class="lbl">MATCHUP</span>
-      <div class="vs">${side(G.teamId, true)}<span class="H2">${g.home ? 'VS' : 'AT'}</span>${side(g.opp)}</div>
+      <div class="vs">${side(G.teamId, true)}${(() => { const sp = lineFor(G.teamId, g.opp, g.home); return `<div class="col" style="align-items:center;gap:2px;flex:none"><span class="H2">${g.home ? 'VS' : 'AT'}</span><span class="H ${sp <= -3 ? 'hi' : 'dim'}">${lineText(sp)}</span><span class="dim">WIN ${Math.round(winChance(sp) * 100)}%</span></div>`; })()}${side(g.opp)}</div>
       <p style="text-align:center">${st}</p>${scoutHTML(g.opp)}</div>
     <div class="row"><button class="b tall" data-act="go" data-id="roster">LINEUP</button><button class="b tall stack" data-act="myScheme" style="min-width:0">YOUR D<small>${SCHEMES[G.scheme || 'man'].n}</small></button><span class="sp"></span><button class="b tall" data-act="quicksim">SIMULATE</button><button class="b big hi" data-act="play">PLAY</button></div></div>`;
 };
@@ -3657,7 +3723,7 @@ function cardHTML(p, ctx, team) {
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px 7px">
       ${kvb('MOR', '', bar(p.morale, p.morale < 40 ? 'low' : ''))}${kvb('CON', '', bar(p.cond, p.cond < 50 ? 'low' : ''))}${kvb('XP', '', bar(p.xp / need * 100, 'xp'))}</div>
     <div class="row" style="gap:6px"><span class="H dim">DUNK</span>${canDunk(p) ? (ctx === 'roster' ? `<button class="b mini" data-act="dunkCycle" title="${DUNKS.filter(d => dunkRating(p) >= d.need).length} of ${DUNKS.length} unlocked">${esc(DUNKS[dunkOf(p)].n)} ${ico('right', 5)}</button>` : `<span>${esc(DUNKS[dunkOf(p)].n)}</span>`) : '<span class="dim">not yet</span>'}</div>
-    <div class="fitline">${fitHTML(p, ctx === 'roster' ? G.roster.indexOf(p) : -1)}${p.ten ? '<span class="ftag hi">10-DAY</span>' : ''}${p.inj > 0 ? `<span class="ftag" style="color:var(--bad)">OUT ${p.inj}</span>` : ''}${formTag(p) ? `<span class="ftag ${formTag(p)}">${formTag(p) === 'hot' ? 'HOT' : 'SLUMP'}</span>` : ''}${p.sup ? '<span class="H sup">SUPERSTAR</span>' : ''}</div>
+    <div class="fitline">${fitHTML(p, ctx === 'roster' ? G.roster.indexOf(p) : -1)}${p.ten ? '<span class="ftag hi">10-DAY</span>' : ''}${p.inj > 0 ? `<span class="ftag" style="color:var(--bad)">OUT ${p.inj}</span>` : ''}${formTag(p) ? `<span class="ftag ${formTag(p)}">${formTag(p) === 'hot' ? 'HOT' : 'SLUMP'}</span>` : ''}${p.goat ? '<span class="goat">GOAT</span>' : p.sup ? '<span class="H sup">SUPERSTAR</span>' : ''}</div>
     <span class="dim">${p.st.gp ? `${(p.st.pts / g).toFixed(1)} PTS &middot; ${(p.st.reb / g).toFixed(1)} REB &middot; ${fgPct(p.st)} FG &middot; ${p.st.tpm || 0} 3PM${p.st.td ? ' &middot; ' + p.st.td + ' TD' : ''}` : 'No games yet this season'}</span></div>`;
 }
 function renameModal() {
@@ -3758,7 +3824,7 @@ function tradeTeams() { return aiTeams().map(t => t.id).sort((a, b) => TEAMS[a].
 function miniCard(p, tid) {
   const T = TEAMS[tid], g = Math.max(1, p.st.gp);
   return `<div class="card" style="gap:2px"><div class="head"><img class="ico face" src="${faceURL(playerFace(p, T), '#0e2a31')}" alt="" style="width:20px">
-    <div class="col" style="gap:1px;min-width:0"><span class="row" style="gap:4px;flex-wrap:nowrap;min-width:0"><span class="H nmx">${starTag(p)}${esc(p.name)}</span>${p.sup ? '<span class="sup" style="flex:none">SUPERSTAR</span>' : p.star ? '<span class="hi H" style="flex:none">STAR</span>' : ''}${formIco(p)}</span><span class="dim">${POS[p.pos]} &middot; ${fmtHt(p.ht)} ${p.wt} lb &middot; age ${p.age}</span>
+    <div class="col" style="gap:1px;min-width:0"><span class="row" style="gap:4px;flex-wrap:nowrap;min-width:0"><span class="H nmx">${starTag(p)}${esc(p.name)}</span>${p.goat ? '<span class="goat" style="flex:none">GOAT</span>' : p.sup ? '<span class="sup" style="flex:none">SUPERSTAR</span>' : p.star ? '<span class="hi H" style="flex:none">STAR</span>' : ''}${formIco(p)}</span><span class="dim">${POS[p.pos]} &middot; ${fmtHt(p.ht)} ${p.wt} lb &middot; age ${p.age}</span>
     <span class="row" style="gap:4px"><span class="H dim">NOW</span>${starsHTML(ovr(p), 7)}<span class="H dim">MAX</span>${starsHTML(ovr(p, true), 7)}</span></div></div>
     <span>${ATTR.map(a => `<span class="H dim">${ATTR_SHORT[a]}</span> ${p[a]}`).join(' &nbsp;')} &nbsp;${fitHTML(p, -1)}</span>
     ${zonesHTML(p, false)}
@@ -3847,8 +3913,8 @@ SCREENS.post = () => {
         ${rows.map(([p, b], i) => `<tr class="${i === 0 ? 'me' : ''}"><td>${starTag(p)}${esc(lastName(p.name))}${isTD(b) ? ' <span class="good">TD</span>' : ''}</td><td class="r">${b.pts}</td><td class="r">${b.fgm || 0}/${b.fga || 0}</td><td class="r">${b.tpm || 0}/${b.tpa || 0}</td><td class="r">${b.reb}</td><td class="r">${b.ast}</td><td class="r">${b.stl}</td><td class="r">${b.blk}</td></tr>`).join('')}
         ${(() => { const t = rows.reduce((a, [, b]) => { for (const k of ['pts', 'fgm', 'fga', 'tpm', 'tpa', 'reb', 'ast', 'stl', 'blk']) a[k] = (a[k] || 0) + (b[k] || 0); return a; }, {}); return `<tr><td class="H dim">TEAM</td><td class="r">${t.pts}</td><td class="r">${t.fga ? Math.round(t.fgm / t.fga * 100) : 0}%</td><td class="r">${t.tpa ? Math.round(t.tpm / t.tpa * 100) : 0}%</td><td class="r">${t.reb}</td><td class="r">${t.ast}</td><td class="r">${t.stl}</td><td class="r">${t.blk}</td></tr>`; })()}</table></div>
       <div class="bx col" style="flex:1;min-width:0;gap:3px;padding:9px 6px 4px"><span class="lbl">REPORT</span>
-        <div class="row rchips" style="flex-wrap:wrap;gap:4px"><span class="chip hi">+${L.rw.cc} ${ico('ball', 7)}</span><span class="chip">${L.rw.fans >= 0 ? '+' : ''}${L.rw.fans}% fans</span>${!L.isPO ? `<span class="chip">${rec(G.teams[G.teamId])}</span>` : ''}${L.bb ? `<span class="chip ${L.bb.mine ? 'good' : 'bad'}">${L.bb.mine ? 'BUZZER BEATER' : 'LOST AT THE HORN'}</span>` : L.comeback ? `<span class="chip good">COMEBACK</span>` : ''}</div>
-        <div class="list grow" style="gap:2px">${L.bb ? `<p class="${L.bb.mine ? 'good' : 'bad'}">${esc(L.bb.name)} ${L.bb.mine ? 'won it at the buzzer!' : 'beat you at the buzzer.'}</p>` : ''}${L.comeback ? `<p class="good">Came back from ${L.comeback} down.</p>` : ''}${L.hurt && L.hurt.length ? `<p class="bad">Hurt dunking: ${L.hurt.map(n => esc(n)).join(', ')}.</p>` : ''}${L.dunks && L.dunks.length ? `<p class="hi">Dunks: ${L.dunks.map(d => `${esc(lastName(d.name))} (${esc(d.dunk.toLowerCase())})`).join(', ')}</p>` : ''}${L.oppTop ? `<p class="dim">${esc(L.oppTop.name)} led ${TEAMS[L.oppId].abbr} with ${L.oppTop.pts}.</p>` : ''}${L.news.map(n => `<p>${esc(n)}</p>`).join('')}
+        <div class="row rchips" style="flex-wrap:wrap;gap:4px"><span class="chip hi">+${L.rw.cc} ${ico('ball', 7)}</span><span class="chip">${L.rw.fans >= 0 ? '+' : ''}${L.rw.fans}% fans</span>${!L.isPO ? `<span class="chip">${rec(G.teams[G.teamId])}</span>` : ''}${L.bb ? `<span class="chip ${L.bb.mine ? 'good' : 'bad'}">${L.bb.mine ? 'BUZZER BEATER' : 'LOST AT THE HORN'}</span>` : L.upset > 0 ? '<span class="chip good">UPSET WIN</span>' : L.upset < 0 ? '<span class="chip bad">UPSET LOSS</span>' : L.comeback ? `<span class="chip good">COMEBACK</span>` : ''}</div>
+        <div class="list grow" style="gap:2px">${L.bb ? `<p class="${L.bb.mine ? 'good' : 'bad'}">${esc(L.bb.name)} ${L.bb.mine ? 'won it at the buzzer!' : 'beat you at the buzzer.'}</p>` : ''}${L.upset > 0 ? `<p class="good">Upset! The line had you as ${L.upset}-point underdogs.</p>` : L.upset < 0 ? `<p class="bad">Upset loss. You were favored by ${-L.upset}.</p>` : ''}${L.comeback ? `<p class="good">Came back from ${L.comeback} down.</p>` : ''}${L.hurt && L.hurt.length ? `<p class="bad">Hurt dunking: ${L.hurt.map(n => esc(n)).join(', ')}.</p>` : ''}${L.dunks && L.dunks.length ? `<p class="hi">Dunks: ${L.dunks.map(d => `${esc(lastName(d.name))} (${esc(d.dunk.toLowerCase())})`).join(', ')}</p>` : ''}${L.oppTop ? `<p class="dim">${esc(L.oppTop.name)} led ${TEAMS[L.oppId].abbr} with ${L.oppTop.pts}.</p>` : ''}${L.news.map(n => `<p>${esc(n)}</p>`).join('')}
         ${feedSnips()}
         ${L.others.length ? `<p class="H dim">AROUND THE LEAGUE</p>${L.others.map(x => `<p class="dim">${TEAMS[x[0]].abbr} ${x[1]} - ${x[3]} ${TEAMS[x[2]].abbr}</p>`).join('')}` : ''}</div></div></div>
     <div class="bottomR"><button class="b tall" data-act="openFeed" data-id="post">${ico('bubble', 9)} FEED${feedUnread() ? ` <span class="fbadge">${feedUnread() > 9 ? '9+' : feedUnread()}</span>` : ''}</button><button class="b tall hi" data-act="postNext">CONTINUE</button></div></div>`;
@@ -3884,7 +3950,7 @@ SCREENS.off = () => {
   const why = G.roster.length >= MAXR ? `Roster is full (${MAXR}). Release someone first.` : payroll() + sal > CAP ? 'Not enough cap space.' : '';
   return `<div class="scr" style="gap:8px"><div class="top">${back('hub')}<h2 class="H2">DRAFT &middot; ROUND ${draftRound()}, PICK ${no}</h2>${chips()}</div>
     <div class="row grow" style="align-items:stretch;gap:12px">
-      <div class="list" style="flex:1.05">${o.prospects.slice(0, 14).map(q => `<button class="lr ${U.dsel === q.id ? 'sel' : ''}" data-act="dsel" data-id="${q.id}"><span class="pos">${POS[q.pos]}</span><span class="nm">${esc(q.name)} <span class="dim">${fmtHt(q.ht)} &middot; ${q.age}</span></span><span class="rt"><span class="H dim">MAX</span>${starsHTML(ovr(q, true), 7)}</span></button>`).join('')}</div>
+      <div class="list" style="flex:1.05">${o.prospects.slice(0, 14).map(q => `<button class="lr ${U.dsel === q.id ? 'sel' : ''}" data-act="dsel" data-id="${q.id}"><span class="pos">${POS[q.pos]}</span><span class="nm">${q.goat ? '<span class="goat">GOAT</span> ' : ''}${esc(q.name)} <span class="dim">${fmtHt(q.ht)} &middot; ${q.age}</span></span><span class="rt"><span class="H dim">MAX</span>${starsHTML(ovr(q, true), 7)}</span></button>`).join('')}</div>
       <div class="col" style="flex:1;gap:7px">${p ? `<div class="bx" style="padding:7px 6px 4px">${miniCard(p, G.teamId)}</div>
         <button class="b" data-act="draft" data-id="${p.id}" ${why ? 'disabled' : ''}>DRAFT: 3 YEARS, $${sal}M</button>${why ? `<span class="hi">${why}</span>` : ''}` : ''}
         <div class="row" style="gap:9px"><button class="b sp" data-act="goRoster">ROSTER</button><button class="b sp ${U.arm === 'pass' ? 'warn' : ''}" data-act="offNext">${U.arm === 'pass' ? 'SURE?' : 'PASS'}</button></div></div></div></div>`;
